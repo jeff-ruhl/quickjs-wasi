@@ -42,9 +42,11 @@
 #include <conio.h>
 #include <utime.h>
 #else
+#if !defined(__wasi__)
 #include <dlfcn.h>
 #include <termios.h>
 #include <sys/ioctl.h>
+#endif
 #include <sys/wait.h>
 
 #if defined(__APPLE__)
@@ -57,7 +59,7 @@ typedef sig_t sighandler_t;
 
 #endif
 
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__wasi__)
 /* enable the os.Worker API. IT relies on POSIX threads */
 #define USE_WORKER
 #endif
@@ -453,7 +455,7 @@ typedef JSModuleDef *(JSInitModuleFunc)(JSContext *ctx,
                                         const char *module_name);
 
 
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(__wasi__)
 static JSModuleDef *js_module_loader_so(JSContext *ctx,
                                         const char *module_name)
 {
@@ -797,10 +799,14 @@ static void js_std_file_finalizer(JSRuntime *rt, JSValue val)
     JSSTDFile *s = JS_GetOpaque(val, js_std_file_class_id);
     if (s) {
         if (s->f && s->close_in_finalizer) {
+#if !defined(__wasi__)
             if (s->is_popen)
                 pclose(s->f);
             else
                 fclose(s->f);
+#else
+            fclose(s->f);
+#endif
         }
         js_free_rt(rt, s);
     }
@@ -904,6 +910,7 @@ static JSValue js_std_open(JSContext *ctx, JSValueConst this_val,
 static JSValue js_std_popen(JSContext *ctx, JSValueConst this_val,
                             int argc, JSValueConst *argv)
 {
+#if !defined(__wasi__)
     const char *filename, *mode = NULL;
     FILE *f;
     int err;
@@ -934,6 +941,7 @@ static JSValue js_std_popen(JSContext *ctx, JSValueConst this_val,
  fail:
     JS_FreeCString(ctx, filename);
     JS_FreeCString(ctx, mode);
+#endif
     return JS_EXCEPTION;
 }
 
@@ -970,6 +978,7 @@ static JSValue js_std_fdopen(JSContext *ctx, JSValueConst this_val,
     return JS_EXCEPTION;
 }
 
+#if !defined(__wasi__)
 static JSValue js_std_tmpfile(JSContext *ctx, JSValueConst this_val,
                               int argc, JSValueConst *argv)
 {
@@ -981,6 +990,7 @@ static JSValue js_std_tmpfile(JSContext *ctx, JSValueConst this_val,
         return JS_NULL;
     return js_new_std_file(ctx, f, TRUE, FALSE);
 }
+#endif
 
 static JSValue js_std_sprintf(JSContext *ctx, JSValueConst this_val,
                           int argc, JSValueConst *argv)
@@ -1041,10 +1051,14 @@ static JSValue js_std_file_close(JSContext *ctx, JSValueConst this_val,
         return JS_EXCEPTION;
     if (!s->f)
         return JS_ThrowTypeError(ctx, "invalid file handle");
+#if !defined(__wasi__)
     if (s->is_popen)
         err = js_get_errno(pclose(s->f));
     else
         err = js_get_errno(fclose(s->f));
+#else
+    err = js_get_errno(fclose(s->f));
+#endif
     s->f = NULL;
     return JS_NewInt32(ctx, err);
 }
@@ -1273,6 +1287,7 @@ static JSValue js_std_file_putByte(JSContext *ctx, JSValueConst this_val,
 }
 
 /* urlGet */
+#if !defined(__wasi__)
 
 #define URL_GET_PROGRAM "curl -s -i"
 #define URL_GET_BUF_SIZE 4096
@@ -1458,6 +1473,8 @@ static JSValue js_std_urlGet(JSContext *ctx, JSValueConst this_val,
     return JS_EXCEPTION;
 }
 
+#endif // !defined(__wasi__)
+
 static JSClassDef js_std_file_class = {
     "FILE",
     .finalizer = js_std_file_finalizer,
@@ -1489,7 +1506,9 @@ static const JSCFunctionListEntry js_std_funcs[] = {
     JS_CFUNC_DEF("setenv", 1, js_std_setenv ),
     JS_CFUNC_DEF("unsetenv", 1, js_std_unsetenv ),
     JS_CFUNC_DEF("getenviron", 1, js_std_getenviron ),
+#if !defined(__wasi__)
     JS_CFUNC_DEF("urlGet", 1, js_std_urlGet ),
+#endif
     JS_CFUNC_DEF("loadFile", 1, js_std_loadFile ),
     JS_CFUNC_DEF("strerror", 1, js_std_strerror ),
     JS_CFUNC_DEF("parseExtJSON", 1, js_std_parseExtJSON ),
@@ -1498,7 +1517,9 @@ static const JSCFunctionListEntry js_std_funcs[] = {
     JS_CFUNC_DEF("open", 2, js_std_open ),
     JS_CFUNC_DEF("popen", 2, js_std_popen ),
     JS_CFUNC_DEF("fdopen", 2, js_std_fdopen ),
+#if !defined(__wasi__)
     JS_CFUNC_DEF("tmpfile", 0, js_std_tmpfile ),
+#endif
     JS_CFUNC_MAGIC_DEF("puts", 1, js_std_file_puts, 0 ),
     JS_CFUNC_DEF("printf", 1, js_std_printf ),
     JS_CFUNC_DEF("sprintf", 1, js_std_sprintf ),
@@ -1714,6 +1735,7 @@ static JSValue js_os_ttySetRaw(JSContext *ctx, JSValueConst this_val,
 static JSValue js_os_ttyGetWinSize(JSContext *ctx, JSValueConst this_val,
                                    int argc, JSValueConst *argv)
 {
+#if !defined(__wasi__)
     int fd;
     struct winsize ws;
     JSValue obj;
@@ -1731,19 +1753,25 @@ static JSValue js_os_ttyGetWinSize(JSContext *ctx, JSValueConst this_val,
     } else {
         return JS_NULL;
     }
+#else
+    return JS_NULL;
+#endif
 }
 
+#if !defined(__wasi__)
 static struct termios oldtty;
 
 static void term_exit(void)
 {
     tcsetattr(0, TCSANOW, &oldtty);
 }
+#endif
 
 /* XXX: should add a way to go back to normal mode */
 static JSValue js_os_ttySetRaw(JSContext *ctx, JSValueConst this_val,
                                int argc, JSValueConst *argv)
 {
+#if !defined(__wasi__)
     struct termios tty;
     int fd;
     
@@ -1766,6 +1794,7 @@ static JSValue js_os_ttySetRaw(JSContext *ctx, JSValueConst this_val,
     tcsetattr(fd, TCSANOW, &tty);
 
     atexit(term_exit);
+#endif
     return JS_UNDEFINED;
 }
 
@@ -2717,6 +2746,7 @@ static JSValue js_os_readlink(JSContext *ctx, JSValueConst this_val,
     return make_string_error(ctx, buf, err);
 }
 
+#if !defined(__wasi__)
 static char **build_envp(JSContext *ctx, JSValueConst obj)
 {
     uint32_t len, i;
@@ -2775,8 +2805,10 @@ static char **build_envp(JSContext *ctx, JSValueConst obj)
     }
     goto done;
 }
+#endif
 
 /* execvpe is not available on non GNU systems */
+#if !defined(__wasi__)
 static int my_execvpe(const char *filename, char **argv, char **envp)
 {
     char *path, *p, *p_next, *p1;
@@ -2831,11 +2863,13 @@ static int my_execvpe(const char *filename, char **argv, char **envp)
         errno = EACCES;
     return -1;
 }
+#endif
 
 /* exec(args[, options]) -> exitcode */
 static JSValue js_os_exec(JSContext *ctx, JSValueConst this_val,
                           int argc, JSValueConst *argv)
 {
+#if !defined(__wasi__)
     JSValueConst options, args = argv[0];
     JSValue val, ret_val;
     const char **exec_argv, *file = NULL, *str, *cwd = NULL;
@@ -3028,6 +3062,9 @@ static JSValue js_os_exec(JSContext *ctx, JSValueConst this_val,
  exception:
     ret_val = JS_EXCEPTION;
     goto done;
+#else
+    return JS_EXCEPTION;
+#endif
 }
 
 /* waitpid(pid, block) -> [pid, status] */

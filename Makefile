@@ -27,6 +27,11 @@ CONFIG_DARWIN=y
 endif
 # Windows cross compilation from Linux
 #CONFIG_WIN32=y
+# Wasi cross compilation from Linux
+CONFIG_WASI=y
+# Must include wasi-vfs and wasix in include / lib directories
+WASI_ROOT=/opt
+WASI_SDK_HOME=/opt/wasi-sdk
 # use link time optimization (smaller and faster executables but slower build)
 CONFIG_LTO=y
 # consider warnings as errors (for development)
@@ -38,6 +43,12 @@ ifdef CONFIG_DARWIN
 # use clang instead of gcc
 CONFIG_CLANG=y
 CONFIG_DEFAULT_AR=y
+endif
+
+ifdef CONFIG_WASI
+CONFIG_CLANG=y
+CONFIG_DEFAULT_AR=y
+CONFIG_LTO=y
 endif
 
 # installation directory
@@ -60,11 +71,18 @@ ifdef CONFIG_WIN32
   endif
   EXE=.exe
 else
-  CROSS_PREFIX=
-  EXE=
+  ifdef CONFIG_WASI
+    CROSS_PREFIX=$(WASI_SDK_HOME)/bin/
+    EXE=.wasm
+  else
+    CROSS_PREFIX=
+    EXE=
+  endif
 endif
 ifdef CONFIG_CLANG
-  HOST_CC=clang
+  HOST_CC=gcc
+  HOST_CFLAGS=-g -Wall -MMD -MF $(OBJDIR)/$(@F).d
+  HOST_CFLAGS += -Wno-array-bounds -Wno-format-truncation
   CC=$(CROSS_PREFIX)clang
   CFLAGS=-g -Wall -MMD -MF $(OBJDIR)/$(@F).d
   CFLAGS += -Wextra
@@ -74,7 +92,10 @@ ifdef CONFIG_CLANG
   CFLAGS += -Wunused -Wno-unused-parameter
   CFLAGS += -Wwrite-strings
   CFLAGS += -Wchar-subscripts -funsigned-char
-  CFLAGS += -MMD -MF $(OBJDIR)/$(@F).d
+  ifdef CONFIG_WASI
+    CFLAGS += -D_WASI_EMULATED_GETPID -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS
+    CFLAGS += -I$(WASI_ROOT)/include
+  endif
   ifdef CONFIG_DEFAULT_AR
     AR=$(CROSS_PREFIX)ar
   else
@@ -89,6 +110,7 @@ else
   CC=$(CROSS_PREFIX)gcc
   CFLAGS=-g -Wall -MMD -MF $(OBJDIR)/$(@F).d
   CFLAGS += -Wno-array-bounds -Wno-format-truncation
+  HOST_CFLAGS=$(CFLAGS)
   ifdef CONFIG_LTO
     AR=$(CROSS_PREFIX)gcc-ar
   else
@@ -108,11 +130,14 @@ DEFINES+=-D__USE_MINGW_ANSI_STDIO # for standard snprintf behavior
 endif
 
 CFLAGS+=$(DEFINES)
+HOST_CFLAGS+=$(DEFINES)
 CFLAGS_DEBUG=$(CFLAGS) -O0
 CFLAGS_SMALL=$(CFLAGS) -Os
 CFLAGS_OPT=$(CFLAGS) -O2
+HOST_CFLAGS_OPT=$(HOST_CFLAGS) -O2
 CFLAGS_NOLTO:=$(CFLAGS_OPT)
 LDFLAGS=-g
+HOST_LDFLAGS=-g
 ifdef CONFIG_LTO
 CFLAGS_SMALL+=-flto
 CFLAGS_OPT+=-flto
@@ -130,6 +155,9 @@ ifdef CONFIG_WIN32
 LDEXPORT=
 else
 LDEXPORT=-rdynamic
+endif
+ifdef CONFIG_WASI
+LDFLAGS += -L$(WASI_ROOT)/lib -lwasi_vfs -lwasi-emulated-signal -lcrypt -lm -lwasi-emulated-mman -lwasi-emulated-signal -lwasi-emulated-process-clocks -lc -lwasix
 endif
 
 PROGS=qjs$(EXE) qjsc$(EXE) run-test262
@@ -197,7 +225,7 @@ ifneq ($(CROSS_PREFIX),)
 
 $(QJSC): $(OBJDIR)/qjsc.host.o \
     $(patsubst %.o, %.host.o, $(QJS_LIB_OBJS))
-	$(HOST_CC) $(LDFLAGS) -o $@ $^ $(HOST_LIBS)
+	$(HOST_CC) $(HOST_LDFLAGS) -o $@ $^ $(HOST_LIBS)
 
 endif #CROSS_PREFIX
 
@@ -217,7 +245,7 @@ qjs32_s: $(patsubst %.o, %.m32s.o, $(QJS_OBJS))
 	$(CC) -m32 $(LDFLAGS) -o $@ $^ $(LIBS)
 	@size $@
 
-qjscalc: qjs
+qjscalc: qjs$(EXE)
 	ln -sf $< $@
 
 ifdef CONFIG_LTO
@@ -263,7 +291,7 @@ $(OBJDIR)/%.o: %.c | $(OBJDIR)
 	$(CC) $(CFLAGS_OPT) -c -o $@ $<
 
 $(OBJDIR)/%.host.o: %.c | $(OBJDIR)
-	$(HOST_CC) $(CFLAGS_OPT) -c -o $@ $<
+	$(HOST_CC) $(HOST_CFLAGS_OPT) -c -o $@ $<
 
 $(OBJDIR)/%.pic.o: %.c | $(OBJDIR)
 	$(CC) $(CFLAGS_OPT) -fPIC -DJS_SHARED_LIBRARY -c -o $@ $<
@@ -287,7 +315,7 @@ regexp_test: libregexp.c libunicode.c cutils.c
 	$(CC) $(LDFLAGS) $(CFLAGS) -DTEST -o $@ libregexp.c libunicode.c cutils.c $(LIBS)
 
 unicode_gen: $(OBJDIR)/unicode_gen.host.o $(OBJDIR)/cutils.host.o libunicode.c unicode_gen_def.h
-	$(HOST_CC) $(LDFLAGS) $(CFLAGS) -o $@ $(OBJDIR)/unicode_gen.host.o $(OBJDIR)/cutils.host.o
+	$(HOST_CC) $(HOST_LDFLAGS) $(HOST_CFLAGS) -o $@ $(OBJDIR)/unicode_gen.host.o $(OBJDIR)/cutils.host.o
 
 clean:
 	rm -f repl.c qjscalc.c out.c
