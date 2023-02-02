@@ -207,6 +207,10 @@ void udf_call(udf_string_t *name, udf_list_u8_t *args, udf_list_u8_t *ret)
     JSValue *js_func_argv = NULL;
     JSValue js_out_len = 0;
     JSValue js_item = 0;
+    JSValue js_res_array = 0;
+    JSValue js_push = 0;
+    JSValue js_push_res = 0;
+    JSValue js_push_argv[1] = {0};
     uint64_t arg_array_len = 0;
     uint32_t item = 0;
 
@@ -238,7 +242,19 @@ void udf_call(udf_string_t *name, udf_list_u8_t *args, udf_list_u8_t *ret)
     js_res = JS_Call(ctx, js_func, global, arg_array_len, js_func_argv);
     if (JS_IsException(js_res)) goto error;
 
-    js_msgpack_argv[0] = js_res;
+    // Put results in an array
+    js_res_array = JS_NewArray(ctx);
+    if (JS_IsException(js_res_array)) goto error;
+
+    js_push = JS_GetPropertyStr(ctx, js_res_array, "push");
+    if (JS_IsException(js_arg_array_len)) goto error;
+
+    js_push_argv[0] = js_res; 
+    js_push_res = JS_Call(ctx, js_push, js_res_array, 1, js_push_argv);
+    if (JS_IsException(js_push_res)) goto error;
+
+    // Pack result
+    js_msgpack_argv[0] = js_res_array;
     js_packed_res = JS_Call(ctx, pack, global, 1, js_msgpack_argv);
     if (JS_IsException(js_packed_res)) goto error;
 
@@ -266,6 +282,9 @@ exit:
     JS_FreeValue(ctx, js_arg_array);
     JS_FreeValue(ctx, js_arg_array_len);
     JS_FreeValue(ctx, js_res);
+    JS_FreeValue(ctx, js_push);
+    JS_FreeValue(ctx, js_push_res);
+    JS_FreeValue(ctx, js_res_array);
     JS_FreeValue(ctx, js_packed_res);
     if (js_func_argv)
     {
