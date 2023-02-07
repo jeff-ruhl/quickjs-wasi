@@ -29,7 +29,7 @@ out = udf.call(store, 'foo', msgpack.packb(["hello"]))
 print('Result of foo("hello"):', out)
 print('Unpacked result of foo("hello"):', msgpack.unpackb(out))
 
-out = udf.call(store, 'math.sqrt', msgpack.packb([2]))
-print('Result of math.sqrt(2):', out)
-print('Unpacked result of math.sqrt(2):', msgpack.unpackb(out))
+out = udf.call(store, 'main.sqrt', msgpack.packb([2]))
+print('Result of main.sqrt(2):', out)
+print('Unpacked result of main.sqrt(2):', msgpack.unpackb(out))
 

@@ -19,4 +19,4 @@ $CC \
     ../libquickjs.a \
     -o udf-quickjs.wasm
 
-wasi-vfs pack udf-quickjs.wasm --mapdir "/app::./app" --output s2-udf-quickjs.wasm
+wasi-vfs pack udf-quickjs.wasm --mapdir "/lib::./lib" --mapdir "/app::./app" --output s2-udf-quickjs.wasm

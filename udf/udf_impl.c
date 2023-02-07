@@ -1,9 +1,9 @@
 #include "quickjs.h"
+#include "quickjs-libc.h"
 #include "udf.h"
 #include <malloc.h>
 #include <stddef.h>
 #include <string.h>
-#include "msgpack.h"
 
 static JSRuntime *rt;
 static JSContext *ctx;
@@ -11,11 +11,6 @@ static JSValue global;
 static JSValue msgpack;
 static JSValue pack;
 static JSValue unpack;
-
-void js_std_dump_error(JSContext *ctx);
-void js_std_add_helpers(JSContext *ctx, int argc, char **argv);
-JSModuleDef *js_init_module_std(JSContext *ctx, const char *module_name);
-JSModuleDef *js_init_module_os(JSContext *ctx, const char *module_name);
 
 static int initialize()
 //
@@ -29,7 +24,6 @@ static int initialize()
     int rc = 0;
     JSValue val1 = 0;
     JSValue val2 = 0;
-    JSValue val3 = 0;
 
     if (rt) goto exit;
 
@@ -39,6 +33,8 @@ static int initialize()
         fprintf(stderr, "could not allocate JS runtime\n");
         goto error;
     }
+
+    JS_SetModuleLoaderFunc(rt, NULL, js_module_loader, NULL);
 
     ctx = JS_NewContext(rt);
     if (!ctx) 
@@ -55,33 +51,31 @@ static int initialize()
 
     const char *str = "import * as std from 'std';\n"
                 "import * as os from 'os';\n"
+                "import { serialize as msgpack_serialize, "
+                "         deserialize as msgpack_deserialize } from '/lib/msgpack.js';\n"
                 "globalThis.std = std;\n"
-                "globalThis.os = os;\n";
+                "globalThis.os = os;\n"
+                "globalThis.msgpack_serialize = msgpack_serialize;\n"
+                "globalThis.msgpack_deserialize = msgpack_deserialize;\n";
 
     val1 = JS_Eval(ctx, str, strlen(str), "<input>", JS_EVAL_TYPE_MODULE);
     if (JS_IsException(val1)) goto error;
 
-    val2 = JS_Eval(ctx, MSGPACK_TXT, strlen(MSGPACK_TXT), "<input>", JS_EVAL_TYPE_MODULE);
-    if (JS_IsException(val2)) goto error;
-
-    msgpack = JS_GetPropertyStr(ctx, global, "msgpack");
-    if (JS_IsException(msgpack)) goto error;
-
-    pack = JS_GetPropertyStr(ctx, msgpack, "serialize");
+    pack = JS_GetPropertyStr(ctx, global, "msgpack_serialize");
     if (JS_IsException(pack)) goto error;
 
-    unpack = JS_GetPropertyStr(ctx, msgpack, "deserialize");
+    unpack = JS_GetPropertyStr(ctx, global, "msgpack_deserialize");
     if (JS_IsException(unpack)) goto error;
 
-    str = "std.loadScript('/app/main.js');\n";
+    str = "import * as main from './app/main.js';\n"
+          "globalThis.main = main;\n";
 
-    val3 = JS_Eval(ctx, str, strlen(str), "<input>", JS_EVAL_TYPE_MODULE);
-    if (JS_IsException(val1)) goto error;
+    val2 = JS_Eval(ctx, str, strlen(str), "<input>", JS_EVAL_TYPE_MODULE);
+    if (JS_IsException(val2)) goto error;
 
 exit:
     JS_FreeValue(ctx, val1);
     JS_FreeValue(ctx, val2);
-    JS_FreeValue(ctx, val3);
     return rc;
 
 error:
@@ -178,6 +172,7 @@ exit:
     return js_func;
 
 error:
+    js_func = 0;
     goto exit;
 }
 
