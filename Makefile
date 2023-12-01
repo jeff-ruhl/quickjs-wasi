@@ -30,8 +30,8 @@ endif
 # Wasi cross compilation from Linux
 CONFIG_WASI=y
 # Must include wasi-vfs and wasix in include / lib directories
-WASI_ROOT=/opt
-WASI_SDK_HOME=/opt/wasi-sdk
+#WASI_ROOT=/wasi-sysroot
+WASI_ROOT=/opt/wasi-sdk
 # use link time optimization (smaller and faster executables but slower build)
 CONFIG_LTO=y
 # consider warnings as errors (for development)
@@ -72,7 +72,7 @@ ifdef CONFIG_WIN32
   EXE=.exe
 else
   ifdef CONFIG_WASI
-    CROSS_PREFIX=$(WASI_SDK_HOME)/bin/
+    CROSS_PREFIX=$(WASI_ROOT)/bin/
     EXE=.wasm
   else
     CROSS_PREFIX=
@@ -92,17 +92,21 @@ ifdef CONFIG_CLANG
   CFLAGS += -Wunused -Wno-unused-parameter
   CFLAGS += -Wwrite-strings
   CFLAGS += -Wchar-subscripts -funsigned-char
+  CFLAGS += --target=wasm32-wasi
   ifdef CONFIG_WASI
     CFLAGS += -D_WASI_EMULATED_GETPID -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS
-    CFLAGS += -I$(WASI_ROOT)/include
+    CFLAGS += -I$(WASI_ROOT)/share/wasi-sysroot/include
   endif
-  ifdef CONFIG_DEFAULT_AR
-    AR=$(CROSS_PREFIX)ar
-  else
-    ifdef CONFIG_LTO
-      AR=$(CROSS_PREFIX)llvm-ar
-    else
+  # use ENV-defined AR for WASI compilation
+  ifndef CONFIG_WASI
+    ifdef CONFIG_DEFAULT_AR
       AR=$(CROSS_PREFIX)ar
+    else
+      ifdef CONFIG_LTO
+        AR=$(CROSS_PREFIX)llvm-ar
+      else
+        AR=$(CROSS_PREFIX)ar
+      endif
     endif
   endif
 else
@@ -157,10 +161,10 @@ else
 LDEXPORT=-rdynamic
 endif
 ifdef CONFIG_WASI
-LDFLAGS += -L$(WASI_ROOT)/lib -lwasi_vfs -lwasi-emulated-signal -lcrypt -lm -lwasi-emulated-mman -lwasi-emulated-signal -lwasi-emulated-process-clocks -lc -lwasix
+LDFLAGS += --target=wasm32-wasi -L$(WASI_ROOT)/share/wasi-sysroot/lib/wasm32-wasi -lwasi_vfs -lwasix -lwasi-emulated-signal -lcrypt -lm -lwasi-emulated-mman -lwasi-emulated-signal -lwasi-emulated-process-clocks
 endif
 
-PROGS=qjs$(EXE) qjsc$(EXE) run-test262
+PROGS=libquickjs.a qjs$(EXE) qjsc$(EXE) run-test262
 ifneq ($(CROSS_PREFIX),)
 QJSC_CC=gcc
 QJSC=./host-qjsc
@@ -175,7 +179,6 @@ endif
 ifdef CONFIG_M32
 PROGS+=qjs32 qjs32_s
 endif
-PROGS+=libquickjs.a
 ifdef CONFIG_LTO
 PROGS+=libquickjs.lto.a
 endif

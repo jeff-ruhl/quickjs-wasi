@@ -29,7 +29,7 @@
 #include <assert.h>
 #include <unistd.h>
 #include <errno.h>
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__wasi__)
 #include <sys/wait.h>
 #endif
 
@@ -374,7 +374,7 @@ void help(void)
     exit(1);
 }
 
-#if defined(CONFIG_CC) && !defined(_WIN32)
+#if defined(CONFIG_CC) && !defined(_WIN32) && !defined(__wasi__)
 
 int exec_cmd(char **argv)
 {

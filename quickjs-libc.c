@@ -46,8 +46,8 @@
 #include <dlfcn.h>
 #include <termios.h>
 #include <sys/ioctl.h>
-#endif
 #include <sys/wait.h>
+#endif
 
 #if defined(__APPLE__)
 typedef sig_t sighandler_t;
@@ -532,7 +532,7 @@ int js_module_set_import_meta(JSContext *ctx, JSValueConst func_val,
         return -1;
     if (!strchr(module_name, ':')) {
         strcpy(buf, "file://");
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__wasi__)
         /* realpath() cannot be used with modules compiled with qjsc
            because the corresponding module source code is not
            necessarily present */
@@ -2679,6 +2679,7 @@ static char *realpath(const char *path, char *buf)
 }
 #endif
 
+#if !defined(__wasi__)
 /* return [path, errorcode] */
 static JSValue js_os_realpath(JSContext *ctx, JSValueConst this_val,
                               int argc, JSValueConst *argv)
@@ -2700,8 +2701,9 @@ static JSValue js_os_realpath(JSContext *ctx, JSValueConst this_val,
     }
     return make_string_error(ctx, buf, err);
 }
+#endif
 
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__wasi__)
 static JSValue js_os_symlink(JSContext *ctx, JSValueConst this_val,
                               int argc, JSValueConst *argv)
 {
@@ -3155,7 +3157,7 @@ static JSValue js_os_dup2(JSContext *ctx, JSValueConst this_val,
     return JS_NewInt32(ctx, ret);
 }
 
-#endif /* !_WIN32 */
+#endif /* !_WIN32 && !__wasi__ */
 
 #ifdef USE_WORKER
 
@@ -3681,8 +3683,10 @@ static const JSCFunctionListEntry js_os_funcs[] = {
     JS_CFUNC_MAGIC_DEF("stat", 1, js_os_stat, 0 ),
     JS_CFUNC_DEF("utimes", 3, js_os_utimes ),
     JS_CFUNC_DEF("sleep", 1, js_os_sleep ),
+#if !defined(__wasi__)
     JS_CFUNC_DEF("realpath", 1, js_os_realpath ),
-#if !defined(_WIN32)
+#endif
+#if !defined(_WIN32) && !defined(__wasi__)
     JS_CFUNC_MAGIC_DEF("lstat", 1, js_os_stat, 1 ),
     JS_CFUNC_DEF("symlink", 2, js_os_symlink ),
     JS_CFUNC_DEF("readlink", 1, js_os_readlink ),
