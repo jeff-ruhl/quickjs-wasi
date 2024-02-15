@@ -84,7 +84,7 @@ ifdef CONFIG_CLANG
   HOST_CFLAGS=-g -Wall -MMD -MF $(OBJDIR)/$(@F).d
   HOST_CFLAGS += -Wno-array-bounds -Wno-format-truncation
   CC=$(CROSS_PREFIX)clang
-  CFLAGS=-g -Wall -MMD -MF -O3 $(OBJDIR)/$(@F).d
+  CFLAGS=-Wall -MMD -MF $(OBJDIR)/$(@F).d
   CFLAGS += -Wextra
   CFLAGS += -Wno-sign-compare
   CFLAGS += -Wno-missing-field-initializers
@@ -165,14 +165,14 @@ LDFLAGS += --target=wasm32-wasi -L$(WASI_ROOT)/share/wasi-sysroot/lib/wasm32-was
 endif
 
 PROGS=libquickjs.a qjs$(EXE) run-test262
-ifneq ($(CROSS_PREFIX),)
-QJSC_CC=gcc
-QJSC=./host-qjsc
-PROGS+=$(QJSC)
-else
-QJSC_CC=$(CC)
-QJSC=./qjsc$(EXE)
-endif
+# ifneq ($(CROSS_PREFIX),)
+# QJSC_CC=gcc
+# QJSC=./host-qjsc
+# PROGS+=$(QJSC)
+# else
+# QJSC_CC=$(CC)
+# QJSC=./qjsc$(EXE)
+# endif
 ifndef CONFIG_WIN32
 PROGS+=qjscalc
 endif
@@ -195,7 +195,7 @@ endif
 endif
 endif
 
-all: $(OBJDIR) $(OBJDIR)/quickjs.check.o $(OBJDIR)/qjs.check.o $(PROGS)
+all: $(OBJDIR) libquickjs.a
 
 QJS_LIB_OBJS=$(OBJDIR)/quickjs.o $(OBJDIR)/libregexp.o $(OBJDIR)/libunicode.o $(OBJDIR)/cutils.o $(OBJDIR)/quickjs-libc.o
 
