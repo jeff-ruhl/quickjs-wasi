@@ -84,7 +84,7 @@ ifdef CONFIG_CLANG
   HOST_CFLAGS=-g -Wall -MMD -MF $(OBJDIR)/$(@F).d
   HOST_CFLAGS += -Wno-array-bounds -Wno-format-truncation
   CC=$(CROSS_PREFIX)clang
-  CFLAGS=-g -Wall -MMD -MF $(OBJDIR)/$(@F).d
+  CFLAGS=-g -Wall -MMD -MF -O3 $(OBJDIR)/$(@F).d
   CFLAGS += -Wextra
   CFLAGS += -Wno-sign-compare
   CFLAGS += -Wno-missing-field-initializers
@@ -161,10 +161,10 @@ else
 LDEXPORT=-rdynamic
 endif
 ifdef CONFIG_WASI
-LDFLAGS += --target=wasm32-wasi -L$(WASI_ROOT)/share/wasi-sysroot/lib/wasm32-wasi -lwasi_vfs -lwasix -lwasi-emulated-signal -lcrypt -lm -lwasi-emulated-mman -lwasi-emulated-signal -lwasi-emulated-process-clocks
+LDFLAGS += --target=wasm32-wasi -L$(WASI_ROOT)/share/wasi-sysroot/lib/wasm32-wasi -lwasix -lwasi-emulated-signal -lcrypt -lm -lwasi-emulated-mman -lwasi-emulated-signal -lwasi-emulated-process-clocks
 endif
 
-PROGS=libquickjs.a qjs$(EXE) qjsc$(EXE) run-test262
+PROGS=libquickjs.a qjs$(EXE) run-test262
 ifneq ($(CROSS_PREFIX),)
 QJSC_CC=gcc
 QJSC=./host-qjsc
